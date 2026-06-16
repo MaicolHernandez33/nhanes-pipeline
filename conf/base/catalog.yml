@@ -1,4 +1,33 @@
-# Here you can define all your datasets by using simple YAML syntax.
-#
-# Documentation for this file format can be found in "The Data Catalog"
-# Link: https://docs.kedro.org/en/stable/catalog-data/introduction/#data-catalog
+# =====================================================================
+# FUENTE 1: Archivo Local (Datos Demográficos)
+# =====================================================================
+demographics_raw:
+  type: pandas.CSVDataset
+  filepath: data/01_raw/demographics.csv
+  load_args:
+    sep: ","
+    encoding: "utf-8"
+
+# =====================================================================
+# FUENTE 2: Base de Datos SQL (Datos de Examen Físico / Medidas)
+# =====================================================================
+body_measures_sql:
+  type: pandas.SQLTableDataset
+  credentials: db_credentials
+  table_name: body_measures
+  load_args:
+    index_col: SEQN
+
+# =====================================================================
+# FUENTE 3: API REST (Simulación de Datos de Laboratorio)
+# =====================================================================
+laboratory_api:
+  type: pandas.JSONDataset
+  filepath: data/01_raw/laboratory.json
+
+# =====================================================================
+# DATASET INTERMEDIO: Datos Unificados de NHANES
+# =====================================================================
+nhanes_merged_data:
+  type: pandas.CSVDataset
+  filepath: data/02_intermediate/nhanes_merged.csv
