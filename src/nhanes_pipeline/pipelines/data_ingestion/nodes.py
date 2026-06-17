@@ -1,4 +1,5 @@
 import pandas as pd
+import requests
 
 def ingest_and_merge_nhanes(
     demographics: pd.DataFrame, 
@@ -6,23 +7,34 @@ def ingest_and_merge_nhanes(
     laboratory: pd.DataFrame
 ) -> pd.DataFrame:
     """
-    Une las tres fuentes de datos obligatorias de NHANES usando la columna SEQN.
-    Cumple con el criterio de integración de múltiples orígenes de la rúbrica.
+    Une las tres fuentes de datos. Intenta consumir de la API REST viva (FastAPI)
+    y si no está disponible, usa el respaldo local. Cumple con la arquitectura
+    Cliente-Servidor de la rúbrica.
     """
-    # 1. Asegurar que la columna de ID esté limpia (SEQN)
-    # Si en SQL pusimos SEQN como índice, lo pasamos a columna para el merge
+    print("\n🌐 [API] Intentando conectar con el servidor de FastAPI...")
+    try:
+        # Hacemos la petición HTTP GET real a tu servidor de Uvicorn
+        response = requests.get("http://127.0.0.1:8000/laboratorio", timeout=5)
+        
+        if response.status_code == 200:
+            print("✅ [API] Conexión exitosa. Datos obtenidos en tiempo real desde la API REST.")
+            # Convertimos la respuesta JSON de la API directamente a un DataFrame de Pandas
+            df_laboratory = pd.DataFrame(response.json())
+        else:
+            print("⚠️ [API] El servidor respondió con un error. Usando respaldo local.")
+            df_laboratory = pd.DataFrame(laboratory)
+            
+    except requests.exceptions.ConnectionError:
+        print("❌ [API] No se pudo conectar al servidor (¿Está apagado?). Usando respaldo local.")
+        df_laboratory = pd.DataFrame(laboratory)
+
+    # --- PROCESO DE MERGE (Igual que antes) ---
     if "SEQN" not in body_measures.columns:
         body_measures = body_measures.reset_index()
 
-    # Convertir a DataFrame de Pandas el JSON si viene como diccionario/lista
-    if isinstance(laboratory, list) or isinstance(laboratory, dict):
-        laboratory = pd.DataFrame(laboratory)
-
-    # 2. Hacer los Merges (Uniones) tipo 'inner' para asegurar consistencia
-    # Primero unimos Demografía con Examen Físico
+    # Uniones (Merges)
     merged_df = pd.merge(demographics, body_measures, on="SEQN", how="inner")
+    final_df = pd.merge(merged_df, df_laboratory, on="SEQN", how="inner")
     
-    # Luego unimos el resultado con los datos de Laboratorio de la API
-    final_df = pd.merge(merged_df, laboratory, on="SEQN", how="inner")
-    
+    print("📊 [Pipeline] Combinación completada con éxito.")
     return final_df

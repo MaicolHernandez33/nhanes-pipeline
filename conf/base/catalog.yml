@@ -25,9 +25,12 @@ laboratory_api:
   type: pandas.JSONDataset
   filepath: data/01_raw/laboratory.json
 
+
 # =====================================================================
-# DATASET INTERMEDIO: Datos Unificados de NHANES
+# DATASET INTERMEDIO: Datos Unificados de NHANES (Optimizado con Parquet)
 # =====================================================================
 nhanes_merged_data:
-  type: pandas.CSVDataset
-  filepath: data/02_intermediate/nhanes_merged.csv
+  type: pandas.ParquetDataset
+  filepath: data/02_intermediate/nhanes_merged.parquet
+
+  
