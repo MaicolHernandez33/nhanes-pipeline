@@ -1,40 +1,78 @@
-import pandas as pd
 import os
+import pandas as pd
 
-print("🚀 Iniciando procesamiento local de los 5 archivos reales de NHANES...")
+# Tus archivos ya están en 01_raw, así que trabajaremos todo aquí
+data_dir = "data/01_raw"
 
-folder = "data/01_raw"
+# 🔥 ¡La magia ocurre aquí! Agregamos los ciclos G y H para cubrir los 4 períodos
+ciclos = ["G", "H", "I", "J"]
 
-try:
-    # Leer los 5 archivos locales .xpt respetando los nombres de tu carpeta
-    print("📖 Leyendo archivos SAS (.xpt)... esto puede tomar unos segundos.")
-    df_demo = pd.read_sas(os.path.join(folder, "DEMO_J.xpt"), format='xport')
-    df_bmx = pd.read_sas(os.path.join(folder, "BMX_J.xpt"), format='xport')
-    df_bpx = pd.read_sas(os.path.join(folder, "BPX_J.xpt"), format='xport')
-    df_tchol = pd.read_sas(os.path.join(folder, "TCHOL_J.xpt"), format='xport')
-    df_smq = pd.read_sas(os.path.join(folder, "SMQ_J.xpt"), format='xport')
+data_por_tipo = {
+    "demographics": [],
+    "body_measures": [],
+    "blood_pressure": [],
+    "cholesterol": [],
+    "smoking": []
+}
 
-    # Convertir el ID (SEQN) a entero en todas las tablas para evitar problemas al unir
-    print("🧹 Ajustando los IDs (SEQN)...")
-    for df in [df_demo, df_bmx, df_bpx, df_tchol, df_smq]:
-        if 'SEQN' in df.columns:
-            df['SEQN'] = df['SEQN'].astype(int)
+print("🔄 Consolidando archivos SAS locales desde data/01_raw/ (4 Períodos)...")
 
-    # 1. FUENTE 1: Demografía -> Reemplaza el CSV viejo
-    df_demo.to_csv(os.path.join(folder, "demographics.csv"), index=False)
-    print("✅ demographics.csv actualizado con data real.")
+for letra in ciclos:
+    # Mapear los nombres de los archivos locales automáticamente por ciclo
+    archivos = {
+        "demographics": f"DEMO_{letra}.xpt",
+        "body_measures": f"BMX_{letra}.xpt",
+        "blood_pressure": f"BPX_{letra}.xpt",
+        "cholesterol": f"TCHOL_{letra}.xpt",
+        "smoking": f"SMQ_{letra}.xpt"
+    }
+    
+    for tipo, nombre_archivo in archivos.items():
+        # Validar si el archivo existe con .xpt o .XPT (por si acaso)
+        ruta_completa = os.path.join(data_dir, nombre_archivo)
+        ruta_alt = os.path.join(data_dir, nombre_archivo.replace('.xpt', '.XPT'))
+        ruta_final = ruta_completa if os.path.exists(ruta_completa) else ruta_alt
 
-    # 2. FUENTE 2: Exámenes -> Unimos Medidas Corporales + Presión Arterial
-    df_exam = pd.merge(df_bmx, df_bpx, on="SEQN", how="outer")
-    df_exam.to_csv(os.path.join(folder, "body_measures_real.csv"), index=False)
-    print("✅ body_measures_real.csv (Medidas + Presión) generado con data real.")
+        if os.path.exists(ruta_final):
+            try:
+                print(f"  📖 Leyendo archivo local {nombre_archivo}...")
+                df_temp = pd.read_sas(ruta_final, format="xport")
+                
+                if "SEQN" in df_temp.columns:
+                    df_temp["SEQN"] = df_temp["SEQN"].astype(int)
+                    
+                data_por_tipo[tipo].append(df_temp)
+            except Exception as e:
+                print(f"  ❌ Error al procesar {nombre_archivo}: {e}")
+        else:
+            print(f"  ⚠️ No se encontró el archivo: {ruta_final}")
 
-    # 3. FUENTE 3: Laboratorio y Cuestionario -> Unimos Colesterol + Tabaquismo
-    df_api_data = pd.merge(df_tchol, df_smq, on="SEQN", how="outer")
-    df_api_data.to_json(os.path.join(folder, "laboratory.json"), orient="records")
-    print("✅ laboratory.json (Colesterol + Tabaquismo) actualizado con data real.")
+print("\n🔀 Uniendo ciclos y generando archivos consolidados...")
 
-    print("\n🎉 ¡Éxito! Los datos reales están listos para alimentar tu base de datos y tu pipeline de Kedro.")
+if data_por_tipo["demographics"]:
+    df_demo_all = pd.concat(data_por_tipo["demographics"], axis=0, ignore_index=True)
+    df_demo_all.to_csv(os.path.join(data_dir, "demographics.csv"), index=False)
+    print(f"✅ demographics.csv actualizado. (Total filas: {df_demo_all.shape[0]})")
 
-except Exception as e:
-    print(f"\n💥 Ocurrió un error al procesar: {e}")
+    medidas_list = []
+    for i in range(len(data_por_tipo["body_measures"])):
+        bm = data_por_tipo["body_measures"][i]
+        bp = data_por_tipo["blood_pressure"][i]
+        medidas_list.append(pd.merge(bm, bp, on="SEQN", how="outer"))
+    df_measures_all = pd.concat(medidas_list, axis=0, ignore_index=True)
+    df_measures_all.to_csv(os.path.join(data_dir, "body_measures_real.csv"), index=False)
+    print(f"✅ body_measures_real.csv actualizado. (Total filas: {df_measures_all.shape[0]})")
+
+    lab_list = []
+    for i in range(len(data_por_tipo["cholesterol"])):
+        chol = data_por_tipo["cholesterol"][i]
+        smk = data_por_tipo["smoking"][i]
+        lab_list.append(pd.merge(chol, smk, on="SEQN", how="outer"))
+    df_lab_all = pd.concat(lab_list, axis=0, ignore_index=True)
+    df_lab_all.to_json(os.path.join(data_dir, "laboratory.json"), orient="records", indent=4)
+    print(f"✅ laboratory.json actualizado. (Total filas: {df_lab_all.shape[0]})")
+    
+    print("\n🎉 ¡Éxito total! Los 4 períodos han sido consolidados perfectamente.")
+else:
+    print("❌ No se pudo consolidar: Revisa que los archivos estén en data/01_raw/")
+    
