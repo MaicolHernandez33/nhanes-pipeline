@@ -25,7 +25,6 @@ laboratory_api:
   type: pandas.JSONDataset
   filepath: data/01_raw/laboratory.json
 
-
 # =====================================================================
 # DATASET INTERMEDIO: Datos Unificados de NHANES (Optimizado con Parquet)
 # =====================================================================
@@ -33,4 +32,11 @@ nhanes_merged_data:
   type: pandas.ParquetDataset
   filepath: data/02_intermediate/nhanes_merged.parquet
 
-  
+df_nhanes_limpio:
+  type: pandas.CSVDataset
+  filepath: data/02_intermediate/df_nhanes_limpio.csv
+
+# Este es mi catálogo para el output de ML
+df_nhanes_ml_listo:
+  type: pandas.CSVDataset
+  filepath: data/03_primary/df_nhanes_ml_listo.csv
