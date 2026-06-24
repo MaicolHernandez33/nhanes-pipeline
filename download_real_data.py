@@ -1,78 +1,79 @@
 import os
 import pandas as pd
 
-# Tus archivos ya están en 01_raw, así que trabajaremos todo aquí
 data_dir = "data/01_raw"
-
-# 🔥 ¡La magia ocurre aquí! Agregamos los ciclos G y H para cubrir los 4 períodos
 ciclos = ["G", "H", "I", "J"]
 
-data_por_tipo = {
-    "demographics": [],
-    "body_measures": [],
-    "blood_pressure": [],
-    "cholesterol": [],
-    "smoking": []
-}
+print("🔄 Consolidando de forma SEGURA los archivos SAS para FastAPI y respaldos...")
 
-print("🔄 Consolidando archivos SAS locales desde data/01_raw/ (4 Períodos)...")
+list_demo = []
+list_measures = []
+list_lab = []
 
-for letra in ciclos:
-    # Mapear los nombres de los archivos locales automáticamente por ciclo
-    archivos = {
-        "demographics": f"DEMO_{letra}.xpt",
-        "body_measures": f"BMX_{letra}.xpt",
-        "blood_pressure": f"BPX_{letra}.xpt",
-        "cholesterol": f"TCHOL_{letra}.xpt",
-        "smoking": f"SMQ_{letra}.xpt"
-    }
+for c in ciclos:
+    print(f"📦 Procesando Bloque Clínico del Ciclo {c}...")
     
-    for tipo, nombre_archivo in archivos.items():
-        # Validar si el archivo existe con .xpt o .XPT (por si acaso)
-        ruta_completa = os.path.join(data_dir, nombre_archivo)
-        ruta_alt = os.path.join(data_dir, nombre_archivo.replace('.xpt', '.XPT'))
-        ruta_final = ruta_completa if os.path.exists(ruta_completa) else ruta_alt
+    # Rutas por ciclo
+    f_demo = os.path.join(data_dir, f"DEMO_{c}.xpt")
+    f_bmx  = os.path.join(data_dir, f"BMX_{c}.xpt")
+    f_bpx  = os.path.join(data_dir, f"BPX_{c}.xpt")
+    f_smq  = os.path.join(data_dir, f"SMQ_{c}.xpt")
+    f_tchol = os.path.join(data_dir, f"TCHOL_{c}.xpt")
 
-        if os.path.exists(ruta_final):
-            try:
-                print(f"  📖 Leyendo archivo local {nombre_archivo}...")
-                df_temp = pd.read_sas(ruta_final, format="xport")
-                
-                if "SEQN" in df_temp.columns:
-                    df_temp["SEQN"] = df_temp["SEQN"].astype(int)
-                    
-                data_por_tipo[tipo].append(df_temp)
-            except Exception as e:
-                print(f"  ❌ Error al procesar {nombre_archivo}: {e}")
-        else:
-            print(f"  ⚠️ No se encontró el archivo: {ruta_final}")
+    # Leer archivos si existen
+    df_demo = pd.read_sas(f_demo, format="xport") if os.path.exists(f_demo) else pd.DataFrame()
+    df_bmx  = pd.read_sas(f_bmx, format="xport")  if os.path.exists(f_bmx) else pd.DataFrame()
+    df_bpx  = pd.read_sas(f_bpx, format="xport")  if os.path.exists(f_bpx) else pd.DataFrame()
+    df_smq  = pd.read_sas(f_smq, format="xport")  if os.path.exists(f_smq) else pd.DataFrame()
+    df_tchol = pd.read_sas(f_tchol, format="xport") if os.path.exists(f_tchol) else pd.DataFrame()
 
-print("\n🔀 Uniendo ciclos y generando archivos consolidados...")
+    # Estandarizar el ID del paciente para evitar errores de fusión
+    for df in [df_demo, df_bmx, df_bpx, df_smq, df_tchol]:
+        if not df.empty and "SEQN" in df.columns:
+            df["SEQN"] = df["SEQN"].astype(float)
 
-if data_por_tipo["demographics"]:
-    df_demo_all = pd.concat(data_por_tipo["demographics"], axis=0, ignore_index=True)
+    # 1. Acumular Demografía
+    if not df_demo.empty:
+        list_demo.append(df_demo)
+    
+    # 2. Fusionar Medidas + Presión de forma segura (Mismo Ciclo)
+    if not df_bmx.empty or not df_bpx.empty:
+        if df_bmx.empty: m_df = df_bpx
+        elif df_bpx.empty: m_df = df_bmx
+        else: m_df = pd.merge(df_bmx, df_bpx, on="SEQN", how="outer")
+        list_measures.append(m_df)
+        
+    # 3. Fusionar Colesterol + Tabaquismo de forma segura (Mismo Ciclo)
+    if not df_tchol.empty or not df_smq.empty:
+        if df_tchol.empty: l_df = df_smq
+        elif df_smq.empty: l_df = df_tchol
+        else: l_df = pd.merge(df_tchol, df_smq, on="SEQN", how="outer")
+        list_lab.append(l_df)
+
+print("\n🔀 Generando archivos maestros consolidados de 4 ciclos...")
+
+# Guardar Demografía (Respaldo CSV)
+if list_demo:
+    df_demo_all = pd.concat(list_demo, ignore_index=True)
     df_demo_all.to_csv(os.path.join(data_dir, "demographics.csv"), index=False)
-    print(f"✅ demographics.csv actualizado. (Total filas: {df_demo_all.shape[0]})")
+    print(f"✅ demographics.csv actualizado ({df_demo_all.shape[0]} filas).")
 
-    medidas_list = []
-    for i in range(len(data_por_tipo["body_measures"])):
-        bm = data_por_tipo["body_measures"][i]
-        bp = data_por_tipo["blood_pressure"][i]
-        medidas_list.append(pd.merge(bm, bp, on="SEQN", how="outer"))
-    df_measures_all = pd.concat(medidas_list, axis=0, ignore_index=True)
-    df_measures_all.to_csv(os.path.join(data_dir, "body_measures_real.csv"), index=False)
-    print(f"✅ body_measures_real.csv actualizado. (Total filas: {df_measures_all.shape[0]})")
+# Guardar Medidas Reales (Respaldo CSV)
+if list_measures:
+    df_meas_all = pd.concat(list_measures, ignore_index=True)
+    df_meas_all.to_csv(os.path.join(data_dir, "body_measures_real.csv"), index=False)
+    print(f"✅ body_measures_real.csv actualizado ({df_meas_all.shape[0]} filas).")
 
-    lab_list = []
-    for i in range(len(data_por_tipo["cholesterol"])):
-        chol = data_por_tipo["cholesterol"][i]
-        smk = data_por_tipo["smoking"][i]
-        lab_list.append(pd.merge(chol, smk, on="SEQN", how="outer"))
-    df_lab_all = pd.concat(lab_list, axis=0, ignore_index=True)
+# Guardar Laboratorio EN JSON (¡Esto alimenta a tu FastAPI!)
+if list_lab:
+    df_lab_all = pd.concat(list_lab, ignore_index=True)
+    
+    # Limpieza rápida: Convertir columnas de bytes a strings si las hay (común en read_sas)
+    for col in df_lab_all.columns:
+        if df_lab_all[col].dtype == object:
+            df_lab_all[col] = df_lab_all[col].str.decode('utf-8', errors='ignore')
+            
     df_lab_all.to_json(os.path.join(data_dir, "laboratory.json"), orient="records", indent=4)
-    print(f"✅ laboratory.json actualizado. (Total filas: {df_lab_all.shape[0]})")
-    
-    print("\n🎉 ¡Éxito total! Los 4 períodos han sido consolidados perfectamente.")
-else:
-    print("❌ No se pudo consolidar: Revisa que los archivos estén en data/01_raw/")
-    
+    print(f"✅ laboratory.json generado con éxito ({df_lab_all.shape[0]} filas).")
+
+print("\n🎉 ¡Éxito total! Tu API de FastAPI ahora tiene el combustible completo listo.")

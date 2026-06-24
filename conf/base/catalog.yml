@@ -26,17 +26,27 @@ laboratory_api:
   filepath: data/01_raw/laboratory.json
 
 # =====================================================================
-# DATASET INTERMEDIO: Datos Unificados de NHANES (Optimizado con Parquet)
+# DATASETS INTERMEDIOS: Datos Unificados y Limpios
 # =====================================================================
 nhanes_merged_data:
   type: pandas.ParquetDataset
   filepath: data/02_intermediate/nhanes_merged.parquet
 
+
+# =====================================================================
+# DATASET PRIMARIO: Output listo para Machine Learning
+# =====================================================================
+df_nhanes_ml_listo:
+  type: pandas.CSVDataset
+  filepath: data/03_primary/df_nhanes_ml_listo.csv
+
+# --- DATOS DE ENTRADA ---
 df_nhanes_limpio:
   type: pandas.CSVDataset
   filepath: data/02_intermediate/df_nhanes_limpio.csv
 
-# Este es mi catálogo para el output de ML
-df_nhanes_ml_listo:
-  type: pandas.CSVDataset
-  filepath: data/03_primary/df_nhanes_ml_listo.csv
+# --- MODELO DE SALIDA ---
+modelo_hipertension:
+  type: pickle.PickleDataset
+  filepath: data/06_models/modelo_hipertension_web.pkl
+  backend: joblib
