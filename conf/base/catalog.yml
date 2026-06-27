@@ -50,3 +50,18 @@ modelo_hipertension:
   type: pickle.PickleDataset
   filepath: data/06_models/modelo_hipertension_web.pkl
   backend: joblib
+
+
+# =====================================================================
+# TAREA: PERSISTENCIA EN BASE DE DATOS (REQUISITO DOCKER/POSTGRES)
+# =====================================================================
+model_predictions:
+  type: pandas.SQLTableDataset
+  credentials: db_credentials
+  table_name: model_predictions
+  save_args:
+    if_exists: replace
+    index: false
+
+model_save_summary:
+  type: MemoryDataset
